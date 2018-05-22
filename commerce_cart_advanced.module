@@ -1,0 +1,58 @@
+<?php
+
+/**
+ * @file
+ * Commerce Cart Advanced Module.
+ */
+
+use Drupal\Core\Form\FormStateInterface;
+
+/**
+ * Implements hook_form_FORM_ID_alter() for 'commerce_order_type_form'.
+ */
+function commerce_cart_advanced_form_commerce_order_type_form_alter(array &$form, FormStateInterface $form_state) {
+  /** @var \Drupal\commerce_order\Entity\OrderTypeInterface $order_type */
+  $order_type = $form_state->getFormObject()->getEntity();
+  $view_storage = \Drupal::entityTypeManager()->getStorage('view');
+  $available_form_views = [];
+  foreach ($view_storage->loadMultiple() as $view) {
+    if (strpos($view->get('tag'), 'commerce_cart_form') !== FALSE) {
+      $available_form_views[$view->id()] = $view->label();
+    }
+  }
+
+  $form['commerce_cart_advanced'] = [
+    '#type' => 'details',
+    '#title' => t('Multi Cart Settings'),
+    '#weight' => 6,
+    '#open' => TRUE,
+    '#collapsible' => TRUE,
+  ];
+  $form['commerce_cart_advanced']['cart_form_view'] = [
+    '#type' => 'select',
+    '#title' => t('Checkout flow'),
+    '#options' => $available_form_views,
+    '#default_value' => $order_type->getThirdPartySetting(
+      'commerce_cart_advanced',
+      'cart_form_view',
+      'commerce_cart_form_non_current'
+    ),
+    '#required' => TRUE,
+  ];
+  $form['actions']['submit']['#submit'][] = 'commerce_cart_advanced_order_type_form_submit';
+}
+
+/**
+ * Submit handler for order type edit form.
+ */
+function commerce_cart_advanced_order_type_form_submit($form, FormStateInterface $form_state) {
+  /** @var \Drupal\commerce_order\Entity\OrderTypeInterface $order_type */
+  $order_type = $form_state->getFormObject()->getEntity();
+  $settings = $form_state->getValue(['commerce_cart_advanced']);
+  $order_type->setThirdPartySetting(
+    'commerce_cart_advanced',
+    'cart_form_view',
+    $settings['cart_form_view']
+  );
+  $order_type->save();
+}

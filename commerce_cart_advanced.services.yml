@@ -1,0 +1,5 @@
+services:
+  commerce_cart_advanced.route_subscriber:
+    class: Drupal\commerce_cart_advanced\EventSubscriber\RouteSubscriber
+    tags:
+      - { name: event_subscriber }

@@ -1,0 +1,7 @@
+commerce_cart_advanced.configuration:
+  path: '/admin/commerce/config/cart'
+  defaults:
+    _form: '\Drupal\commerce_cart_advanced\Form\CommerceCartAdvancedSettingsForm'
+    _title: 'Cart advanced settings'
+  requirements:
+    _permission: 'access commerce administration pages'
