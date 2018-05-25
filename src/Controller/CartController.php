@@ -36,7 +36,10 @@ class CartController extends ControllerBase {
    * @param \Drupal\commerce_cart\CartProviderInterface $cart_provider
    *   The cart provider.
    */
-  public function __construct(ConfigFactoryInterface $config_factory, CartProviderInterface $cart_provider) {
+  public function __construct(
+    ConfigFactoryInterface $config_factory,
+    CartProviderInterface $cart_provider
+  ) {
     $this->configFactory = $config_factory;
     $this->cartProvider = $cart_provider;
   }
@@ -84,8 +87,7 @@ class CartController extends ControllerBase {
     $first_cart = current($carts);
     $cart_views = $this->getCartViews([$first_cart->id() => $first_cart]);
     unset($carts[key($carts)]);
-    $this->buildCart(
-      $build,
+    $build[$first_cart->id()] = $this->buildCart(
       $first_cart,
       $cart_views[$first_cart->id()],
       $cacheable_metadata
@@ -104,75 +106,91 @@ class CartController extends ControllerBase {
     $cart_views = $this->getCartViews(
       $carts,
       'commerce_cart_advanced',
-      'commerce_cart_advanced_form'
+      'commerce_cart_form'
     );
-    $this->buildNonCurrentCarts(
-      $build,
+
+    $non_current_cart_forms = $this->buildNonCurrentCarts(
       $carts,
       $cart_views,
-      $cacheable_metadata
+      $cacheable_metadata,
+      ['cart--non-current-form']
     );
+
+    $build['non_current_carts'] = [
+      '#theme' => 'commerce_cart_advanced_non_current',
+      '#carts' => $non_current_cart_forms,
+    ];
     $this->buildCache($build, $cacheable_metadata);
 
     return $build;
   }
 
   /**
-   * Adds all non-current carts to the build.
+   * Builds the non current cart form render array.
    *
-   * @param array $build
-   *   The render array.
    * @param \Drupal\commerce_order\Entity\OrderInterface[] $carts
    *   A list of cart orders.
    * @param array $cart_views
    *   An array of view ids keyed by cart order ID.
    * @param \Drupal\Core\Cache\CacheableMetadata $cacheable_metadata
    *   The cacheable metadata.
+   * @param array $classes
+   *   Optional array of classes to add to the cart form.
+   *
+   * @return array
+   *   The non current carts form render array.
    */
   protected function buildNonCurrentCarts(
-    array &$build,
     array $carts,
     array $cart_views,
-    CacheableMetadata $cacheable_metadata
+    CacheableMetadata $cacheable_metadata,
+    array $classes = []
   ) {
+    $carts_build = [];
     foreach ($carts as $cart_id => $cart) {
-      $this->buildCart(
-        $build,
+      $carts_build[$cart_id] = $this->buildCart(
         $cart,
         $cart_views[$cart->id()],
-        $cacheable_metadata
+        $cacheable_metadata,
+        $classes
       );
     }
+
+    return $carts_build;
   }
 
   /**
-   * Adds a cart to the build.
+   * Builds a cart form render array.
    *
-   * @param array $build
-   *   The render array.
    * @param \Drupal\commerce_order\Entity\OrderInterface $cart
    *   A cart order.
    * @param string $cart_view
    *   The view id used to render the cart.
    * @param \Drupal\Core\Cache\CacheableMetadata $cacheable_metadata
    *   The cacheable metadata.
+   * @param array $classes
+   *   Optional array of classes to add to the cart form.
+   *
+   * @return array
+   *   The cart form render array.
    */
   protected function buildCart(
-    array &$build,
     OrderInterface $cart,
     $cart_view,
-    CacheableMetadata $cacheable_metadata
+    CacheableMetadata $cacheable_metadata,
+    array $classes = []
   ) {
-    $cart_id = $cart->id();
-    $build[$cart_id] = [
-      '#prefix' => '<div class="cart cart-form">',
+    $cart_build = [
+      '#prefix' => '<div class="cart cart-form ' . implode(' ', $classes) . '">',
       '#suffix' => '</div>',
       '#type' => 'view',
       '#name' => $cart_view,
-      '#arguments' => [$cart_id],
+      '#arguments' => [$cart->id()],
       '#embed' => TRUE,
     ];
     $cacheable_metadata->addCacheableDependency($cart);
+
+    return $cart_build;
   }
 
   /**
