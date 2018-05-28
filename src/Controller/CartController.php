@@ -45,6 +45,41 @@ class CartController extends ControllerBase {
   }
 
   /**
+   * Outputs a cart view for the passed in cart.
+   *
+   * @param \Drupal\commerce_order\Entity\OrderInterface $cart
+   *   The selected cart.
+   *
+   * @return array
+   *   A render array.
+   */
+  public function singleCartPage(OrderInterface $cart) {
+    $build = [];
+    $cacheable_metadata = new CacheableMetadata();
+    $cacheable_metadata->addCacheContexts(['user', 'session']);
+
+    $cart_id = $cart->id();
+    $cart_views = $this->getCartViews([$cart_id => $cart]);
+    $build[$cart_id] = [
+      '#prefix' => '<div class="cart cart-form">',
+      '#suffix' => '</div>',
+      '#type' => 'view',
+      '#name' => $cart_views[$cart_id],
+      '#arguments' => [$cart_id],
+      '#embed' => TRUE,
+    ];
+    $cacheable_metadata->addCacheableDependency($cart);
+
+    $build['#cache'] = [
+      'contexts' => $cacheable_metadata->getCacheContexts(),
+      'tags' => $cacheable_metadata->getCacheTags(),
+      'max-age' => $cacheable_metadata->getCacheMaxAge(),
+    ];
+
+    return $build;
+  }
+
+  /**
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container) {
