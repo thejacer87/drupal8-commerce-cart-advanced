@@ -12,7 +12,7 @@ commerce_cart_advanced.single_cart_page:
     _controller: '\Drupal\commerce_cart_advanced\Controller\CartController::singleCartPage'
     _title: 'Shopping cart'
   requirements:
-    _permission: 'access cart'
+    _custom_access: '\Drupal\commerce_cart_advanced\Controller\CartController::checkAccess'
   options:
     parameters:
       cart:

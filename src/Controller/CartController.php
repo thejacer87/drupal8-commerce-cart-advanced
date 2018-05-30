@@ -4,9 +4,12 @@ namespace Drupal\commerce_cart_advanced\Controller;
 
 use Drupal\commerce_cart\CartProviderInterface;
 use Drupal\commerce_order\Entity\OrderInterface;
+use Drupal\Core\Access\AccessResult;
 use Drupal\Core\Cache\CacheableMetadata;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Controller\ControllerBase;
+use Drupal\Core\Routing\RouteMatchInterface;
+use Drupal\Core\Session\AccountInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -45,6 +48,45 @@ class CartController extends ControllerBase {
   }
 
   /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container) {
+    return new static(
+      $container->get('config.factory'),
+      $container->get('commerce_cart.cart_provider')
+    );
+  }
+
+  /**
+   * Checks access.
+   *
+   * Confirms that the user access to the carts.
+   *
+   * @param \Drupal\Core\Routing\RouteMatchInterface $route_match
+   *   The route match.
+   * @param \Drupal\Core\Session\AccountInterface $account
+   *   The current user account.
+   *
+   * @return \Drupal\Core\Access\AccessResult
+   *   The access result.
+   */
+  public function checkAccess(
+    RouteMatchInterface $route_match,
+    AccountInterface $account
+  ) {
+    /** @var \Drupal\commerce_order\Entity\OrderInterface $cart */
+    $cart = $route_match->getParameter('cart');
+
+    // The user can only view their carts.
+    $customer_check = $account->id() == $cart->getCustomerId();
+
+    $access = AccessResult::allowedIf($customer_check)
+      ->addCacheableDependency($cart);
+
+    return $access;
+  }
+
+  /**
    * Outputs a cart view for the passed in cart.
    *
    * @param \Drupal\commerce_order\Entity\OrderInterface $cart
@@ -77,16 +119,6 @@ class CartController extends ControllerBase {
     ];
 
     return $build;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public static function create(ContainerInterface $container) {
-    return new static(
-      $container->get('config.factory'),
-      $container->get('commerce_cart.cart_provider')
-    );
   }
 
   /**
@@ -185,7 +217,7 @@ class CartController extends ControllerBase {
     foreach ($carts as $cart_id => $cart) {
       $carts_build[$cart_id] = $this->buildCart(
         $cart,
-        $cart_views[$cart->id()],
+        $cart_views[$cart_id],
         $cacheable_metadata,
         $classes
       );
