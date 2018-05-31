@@ -3,6 +3,7 @@
 namespace Drupal\commerce_cart_advanced\Controller;
 
 use Drupal\commerce_cart\CartProviderInterface;
+use Drupal\commerce_cart\CartSessionInterface;
 use Drupal\commerce_order\Entity\OrderInterface;
 use Drupal\Core\Access\AccessResult;
 use Drupal\Core\Cache\CacheableMetadata;
@@ -32,19 +33,30 @@ class CartController extends ControllerBase {
   protected $cartProvider;
 
   /**
+   * The cart session.
+   *
+   * @var \Drupal\commerce_cart\CartSessionInterface
+   */
+  protected $cartSession;
+
+  /**
    * Constructs a new CartController object.
    *
    * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
    *   The config factory.
    * @param \Drupal\commerce_cart\CartProviderInterface $cart_provider
    *   The cart provider.
+   * @param \Drupal\commerce_cart\CartSessionInterface $cart_session
+   *   The cart session.
    */
   public function __construct(
     ConfigFactoryInterface $config_factory,
-    CartProviderInterface $cart_provider
+    CartProviderInterface $cart_provider,
+    CartSessionInterface $cart_session
   ) {
     $this->configFactory = $config_factory;
     $this->cartProvider = $cart_provider;
+    $this->cartSession = $cart_session;
   }
 
   /**
@@ -53,7 +65,8 @@ class CartController extends ControllerBase {
   public static function create(ContainerInterface $container) {
     return new static(
       $container->get('config.factory'),
-      $container->get('commerce_cart.cart_provider')
+      $container->get('commerce_cart.cart_provider'),
+      $container->get('commerce_cart.cart_session')
     );
   }
 
@@ -78,9 +91,27 @@ class CartController extends ControllerBase {
     $cart = $route_match->getParameter('cart');
 
     // The user can only view their carts.
-    $customer_check = $account->id() == $cart->getCustomerId();
+    $is_owner = $account->id() == $cart->getCustomerId();
 
-    $access = AccessResult::allowedIf($customer_check)
+    // Additionally, if the user is anonymous the IDs should still be matching
+    // but they would always be 0 making it possible to view other anonymous
+    // user's carts. Check that the cart is available in the current user's
+    // session to verify ownership.
+    if (!$account->isAuthenticated()) {
+      $is_owner = $is_owner && $this->cartSession->hasCartId($cart->id());
+    }
+
+    // Make sure that we are viewing a cart and not a placed order.
+    $is_cart = $cart->getState()->value === 'draft' && $cart->cart;
+
+    // At last, make sure that the cart is not locked. Carts may get locked
+    // during the checkout process such as when going off-site for making a
+    // payment.
+    $is_not_locked = !$cart->isLocked();
+
+    $access = AccessResult::allowedIf($is_owner)
+      ->andIf(AccessResult::allowedIf($is_cart))
+      ->andIf(AccessResult::allowedIf($is_not_locked))
       ->addCacheableDependency($cart);
 
     return $access;
