@@ -179,52 +179,135 @@ class CartController extends ControllerBase {
       return $build;
     }
 
-    // Build the first cart (current cart).
-    // That needs a bit more work since we may have multiple current carts
-    // e.g. one per store.
-    $first_cart = current($carts);
-    $cart_views = $this->getCartViews([$first_cart->id() => $first_cart]);
-    unset($carts[key($carts)]);
-    $build[$first_cart->id()] = $this->buildCart(
-      $first_cart,
-      $cart_views[$first_cart->id()],
-      $cacheable_metadata
-    );
+    // Split carts into current and non-current carts. The existing $cart array
+    // will hold the non-current carts afterwards.
+    $current_carts = $this->splitCarts($carts);
 
-    // If the configuration dictates to display only the current cart, or if we
-    // don't have non-current carts, we're done.
-    $config = $this->configFactory->getEditable('commerce_cart_advanced.settings');
-    $display_non_current_carts = $config->get('display_non_current_carts');
-    if (!$display_non_current_carts || !$carts) {
+    // Build the current carts (first cart per store).
+    $build += $this->buildCurrentCarts($current_carts, $cacheable_metadata);
+
+    // If we don't have non-current carts, or if the configuration dictates to
+    // display only the current carts, we're done.
+    if (!$this->displayNonCurrentCarts($carts)) {
       $this->buildCache($build, $cacheable_metadata);
       return $build;
     }
 
     // Otherwise, build non-current carts.
-    $cart_views = $this->getCartViews(
-      $carts,
-      'commerce_cart_advanced',
-      'commerce_cart_form'
-    );
+    $build += $this->buildNonCurrentCarts($carts, $cacheable_metadata);
 
-    $non_current_cart_forms = $this->buildNonCurrentCarts(
-      $carts,
-      $cart_views,
-      $cacheable_metadata,
-      ['cart--non-current-form']
-    );
-
-    $build['non_current_carts'] = [
-      '#theme' => 'commerce_cart_advanced_non_current',
-      '#carts' => $non_current_cart_forms,
-    ];
+    // Add cache data.
     $this->buildCache($build, $cacheable_metadata);
 
     return $build;
   }
 
   /**
+   * Splits the array of all carts into current and non-current carts.
+   *
+   * Current carts will be returned in an array, while only non-current carts
+   * will remain in the given carts array that is passed by reference.
+   *
+   * One cart per store is considered current (the first encountered); all other
+   * carts are considered as non-current.
+   *
+   * @param \Drupal\commerce_order\Entity\OrderInterface[] $carts
+   *   The carts to split.
+   *
+   * @return \Drupal\commerce_order\Entity\OrderInterface[]
+   *   An array with the current carts, keyed by their IDs.
+   */
+  protected function splitCarts(&$carts) {
+    $current_carts = [];
+    $store_carts = [];
+
+    // Take out one cart per store from the given array.
+    foreach ($carts as $cart_id => $cart) {
+      $store_id = $cart->getStoreId();
+      if (isset($store_carts[$store_id])) {
+        continue;
+      }
+
+      $store_carts[$store_id] = $cart;
+      unset($carts[$cart_id]);
+    }
+
+    // We need the result array to be keyed by the cart IDs.
+    foreach ($store_carts as $cart) {
+      $current_carts[$cart->id()] = $cart;
+    }
+
+    return $current_carts;
+  }
+
+  /**
+   * Builds the current cart form render array.
+   *
+   * @param \Drupal\commerce_order\Entity\OrderInterface[] $carts
+   *   A list of cart orders.
+   * @param \Drupal\Core\Cache\CacheableMetadata $cacheable_metadata
+   *
+   * @return array
+   *   The current carts form render array.
+   */
+  protected function buildCurrentCarts(
+    array $carts,
+    CacheableMetadata $cacheable_metadata
+  ) {
+    $cart_views = $this->getCartViews($carts);
+
+    $current_cart_forms = $this->buildCarts(
+      $carts,
+      $cart_views,
+      $cacheable_metadata,
+      ['cart--current-form']
+    );
+
+    return [
+      'current_carts' => [
+        '#theme' => 'commerce_cart_advanced_current',
+        '#carts' => $current_cart_forms,
+      ]
+    ];
+  }
+
+  /**
    * Builds the non current cart form render array.
+   *
+   * @param \Drupal\commerce_order\Entity\OrderInterface[] $carts
+   *   A list of cart orders.
+   * @param \Drupal\Core\Cache\CacheableMetadata $cacheable_metadata
+   *
+   * @return array
+   *   The non current carts form render array.
+   */
+  protected function buildNonCurrentCarts(
+    array $carts,
+    CacheableMetadata $cacheable_metadata
+  ) {
+    $cart_views = $this->getCartViews(
+      $carts,
+      'commerce_cart_advanced',
+      'commerce_cart_form'
+    );
+
+    $non_current_cart_forms = $this->buildCarts(
+      $carts,
+      $cart_views,
+      $cacheable_metadata,
+      ['cart--non-current-form']
+    );
+
+    return [
+      'non_current_carts' => [
+        '#theme' => 'commerce_cart_advanced_non_current',
+        '#carts' => $non_current_cart_forms,
+      ]
+    ];
+  }
+
+  /**
+   * Builds the render array for the given carts.
    *
    * @param \Drupal\commerce_order\Entity\OrderInterface[] $carts
    *   A list of cart orders.
@@ -236,9 +319,9 @@ class CartController extends ControllerBase {
    *   Optional array of classes to add to the cart form.
    *
    * @return array
-   *   The non current carts form render array.
+   *   The carts form render array.
    */
-  protected function buildNonCurrentCarts(
+  protected function buildCarts(
     array $carts,
     array $cart_views,
     CacheableMetadata $cacheable_metadata,
@@ -366,6 +449,29 @@ class CartController extends ControllerBase {
     }
 
     return $cart_views;
+  }
+
+  /**
+   * Checks whether non-current carts are available and should be displayed.
+   *
+   * @param \Drupal\commerce_order\Entity\OrderInterface[] $carts
+   *   The non-current carts.
+   *
+   * @return bool
+   *   Whether the non-current carts should be displayed or not.
+   */
+  protected function displayNonCurrentCarts($carts) {
+    if (!$carts) {
+      return FALSE;
+    }
+
+    $config = $this->configFactory->get('commerce_cart_advanced.settings');
+    $display_non_current_carts = $config->get('display_non_current_carts');
+    if (!$display_non_current_carts) {
+      return FALSE;
+    }
+
+    return TRUE;
   }
 
 }

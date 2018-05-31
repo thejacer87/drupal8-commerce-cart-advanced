@@ -16,6 +16,11 @@ use Drupal\Core\Form\FormStateInterface;
  */
 function commerce_cart_advanced_theme($existing, $type, $theme, $path) {
   return [
+    'commerce_cart_advanced_current' => [
+      'variables' => [
+        'carts' => NULL,
+      ],
+    ],
     'commerce_cart_advanced_non_current' => [
       'variables' => [
         'carts' => NULL,
