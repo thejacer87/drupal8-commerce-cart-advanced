@@ -6,6 +6,7 @@
  */
 
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\views\Form\ViewsForm;
 
 /**
  * Hooks.
@@ -32,7 +33,10 @@ function commerce_cart_advanced_theme($existing, $type, $theme, $path) {
 /**
  * Implements hook_form_FORM_ID_alter() for 'commerce_order_type_form'.
  */
-function commerce_cart_advanced_form_commerce_order_type_form_alter(array &$form, FormStateInterface $form_state) {
+function commerce_cart_advanced_form_commerce_order_type_form_alter(
+  array &$form,
+  FormStateInterface $form_state
+) {
   /** @var \Drupal\commerce_order\Entity\OrderTypeInterface $order_type */
   $order_type = $form_state->getFormObject()->getEntity();
   $view_storage = \Drupal::entityTypeManager()->getStorage('view');
@@ -60,13 +64,67 @@ function commerce_cart_advanced_form_commerce_order_type_form_alter(array &$form
 }
 
 /**
+ * Implements hook_form_alter().
+ */
+function commerce_cart_advanced_form_alter(
+  &$form,
+  FormStateInterface $form_state,
+  $form_id
+) {
+  if (!($form_state->getFormObject() instanceof ViewsForm)) {
+    return;
+  }
+
+  /** @var \Drupal\views\ViewExecutable $view */
+  $view = reset($form_state->getBuildInfo()['args']);
+  if (empty($view->result)) {
+    return;
+  }
+  $tags = explode(',', $view->storage->get('tag'));
+  // `explode()` will return FALSE if there is no tag.
+  if ($tags === FALSE) {
+    return;
+  }
+  $tags = array_map('trim', $tags);
+  if (!in_array('commerce_cart_form', $tags)) {
+    return;
+  }
+
+  // We know that view forms are built on the base ID plus arguments.
+  $form_id_prefix = 'views_form_' . $view->id() . '_' . $view->current_display . '_';
+  $order_id = substr($form_id, strlen($form_id_prefix));
+  /** @var \Drupal\commerce_order\Entity\OrderInterface $cart */
+  $cart = \Drupal::entityTypeManager()
+    ->getStorage('commerce_order')
+    ->load($order_id);
+
+  if (!$cart) {
+    return;
+  }
+
+  // Can't save a cart for later if the order type does not have the field.
+  if ($cart->hasField('field_non_current_cart')) {
+    $form['actions']['save_for_later'] = [
+      '#type' => 'submit',
+      '#value' => t('Save for Later'),
+      '#weight' => 6,
+      '#submit' => array_merge($form['#submit'], ['_commerce_cart_advanced_cart_form_submit']),
+      '#order_id' => $view->argument['order_id']->value[0],
+    ];
+  }
+}
+
+/**
  * Callbacks.
  */
 
 /**
  * Submit handler for order type edit form.
  */
-function _commerce_cart_advanced_order_type_form_submit($form, FormStateInterface $form_state) {
+function _commerce_cart_advanced_order_type_form_submit(
+  $form,
+  FormStateInterface $form_state
+) {
   /** @var \Drupal\commerce_order\Entity\OrderTypeInterface $order_type */
   $order_type = $form_state->getFormObject()->getEntity();
   $settings = $form_state->getValue(['commerce_cart']);
@@ -76,4 +134,26 @@ function _commerce_cart_advanced_order_type_form_submit($form, FormStateInterfac
     $settings['cart_form_non_current_view']
   );
   $order_type->save();
+}
+
+/**
+ * Submit handler used to save the cart for later.
+ */
+function _commerce_cart_advanced_cart_form_submit(
+  $form,
+  FormStateInterface $form_state
+) {
+  $cart_id = $form_state->getTriggeringElement()['#order_id'];
+  /** @var \Drupal\commerce_order\Entity\OrderInterface $cart */
+  $cart = \Drupal::entityTypeManager()
+    ->getStorage('commerce_order')
+    ->load($cart_id);
+
+  $cart->set('field_non_current_cart', TRUE);
+  $cart->save();
+
+  \Drupal::messenger()->addMessage(
+    \Drupal::translation()->translate('Cart has been saved for later')
+  );
+  $form_state->setRedirect('commerce_cart.page');
 }

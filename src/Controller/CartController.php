@@ -4,6 +4,8 @@ namespace Drupal\commerce_cart_advanced\Controller;
 
 use Drupal\commerce_cart\CartProviderInterface;
 use Drupal\commerce_cart\CartSessionInterface;
+use Drupal\commerce_cart_advanced\Event\CartEvents;
+use Drupal\commerce_cart_advanced\Event\CartsSplitEvent;
 use Drupal\commerce_order\Entity\OrderInterface;
 use Drupal\Core\Access\AccessResult;
 use Drupal\Core\Cache\CacheableMetadata;
@@ -12,6 +14,7 @@ use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\Core\Session\AccountInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 /**
  * Controller for the cart page that provides advanced cart functionality.
@@ -40,6 +43,13 @@ class CartController extends ControllerBase {
   protected $cartSession;
 
   /**
+   * The event dispatcher.
+   *
+   * @var \Symfony\Component\EventDispatcher\EventDispatcherInterface
+   */
+  protected $eventDispatcher;
+
+  /**
    * Constructs a new CartController object.
    *
    * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
@@ -48,15 +58,19 @@ class CartController extends ControllerBase {
    *   The cart provider.
    * @param \Drupal\commerce_cart\CartSessionInterface $cart_session
    *   The cart session.
+   * @param \Symfony\Component\EventDispatcher\EventDispatcherInterface $event_dispatcher
+   *   The event dispatcher.
    */
   public function __construct(
     ConfigFactoryInterface $config_factory,
     CartProviderInterface $cart_provider,
-    CartSessionInterface $cart_session
+    CartSessionInterface $cart_session,
+    EventDispatcherInterface $event_dispatcher
   ) {
     $this->configFactory = $config_factory;
     $this->cartProvider = $cart_provider;
     $this->cartSession = $cart_session;
+    $this->eventDispatcher = $event_dispatcher;
   }
 
   /**
@@ -66,7 +80,8 @@ class CartController extends ControllerBase {
     return new static(
       $container->get('config.factory'),
       $container->get('commerce_cart.cart_provider'),
-      $container->get('commerce_cart.cart_session')
+      $container->get('commerce_cart.cart_session'),
+      $container->get('event_dispatcher')
     );
   }
 
@@ -174,27 +189,47 @@ class CartController extends ControllerBase {
 
     // Display an empty cart if we have no cart available.
     if (!$carts) {
-      $this->buildEmptyCart($build);
+      $build += $this->buildEmptyCart();
       $this->buildCache($build, $cacheable_metadata);
       return $build;
     }
 
-    // Split carts into current and non-current carts. The existing $cart array
-    // will hold the non-current carts afterwards.
-    $current_carts = $this->splitCarts($carts);
+    // Dispatch split event to allow other modules to subscribe to the event and
+    // add custom cart splitting logic.
+    $event = new CartsSplitEvent($carts);
+    $this->eventDispatcher->dispatch(CartEvents::CARTS_SPLIT, $event);
+
+    $current_carts = $event->getCurrentCarts();
+    $non_current_carts = $event->getNonCurrentCarts();
+
+    // Display an empty cart if we have neither current nor non-current
+    // carts. That could happen if an event subscriber removes a cart so that it
+    // is not listed e.g. very old carts, instead of only splitting the carts.
+    if (!$current_carts && !$non_current_carts) {
+      $build += $this->buildEmptyCart();
+      $this->buildCache($build, $cacheable_metadata);
+      return $build;
+    }
 
     // Build the current carts (first cart per store).
     $build += $this->buildCurrentCarts($current_carts, $cacheable_metadata);
 
+    // Permanently mark non current carts as non current. Without this feature,
+    // when a user completes checkout or deletes all items of the current cart
+    // the first non current cart will be displayed as the current. That can be
+    // confusing to the user as they would expect an empty cart page but instead
+    // they may get an old cart.
+    $this->markCartsAsNonCurrent($non_current_carts);
+
     // If we don't have non-current carts, or if the configuration dictates to
     // display only the current carts, we're done.
-    if (!$this->displayNonCurrentCarts($carts)) {
+    if (!$this->displayNonCurrentCarts($non_current_carts)) {
       $this->buildCache($build, $cacheable_metadata);
       return $build;
     }
 
     // Otherwise, build non-current carts.
-    $build += $this->buildNonCurrentCarts($carts, $cacheable_metadata);
+    $build += $this->buildNonCurrentCarts($non_current_carts, $cacheable_metadata);
 
     // Add cache data.
     $this->buildCache($build, $cacheable_metadata);
@@ -203,49 +238,12 @@ class CartController extends ControllerBase {
   }
 
   /**
-   * Splits the array of all carts into current and non-current carts.
-   *
-   * Current carts will be returned in an array, while only non-current carts
-   * will remain in the given carts array that is passed by reference.
-   *
-   * One cart per store is considered current (the first encountered); all other
-   * carts are considered as non-current.
-   *
-   * @param \Drupal\commerce_order\Entity\OrderInterface[] $carts
-   *   The carts to split.
-   *
-   * @return \Drupal\commerce_order\Entity\OrderInterface[]
-   *   An array with the current carts, keyed by their IDs.
-   */
-  protected function splitCarts(&$carts) {
-    $current_carts = [];
-    $store_carts = [];
-
-    // Take out one cart per store from the given array.
-    foreach ($carts as $cart_id => $cart) {
-      $store_id = $cart->getStoreId();
-      if (isset($store_carts[$store_id])) {
-        continue;
-      }
-
-      $store_carts[$store_id] = $cart;
-      unset($carts[$cart_id]);
-    }
-
-    // We need the result array to be keyed by the cart IDs.
-    foreach ($store_carts as $cart) {
-      $current_carts[$cart->id()] = $cart;
-    }
-
-    return $current_carts;
-  }
-
-  /**
    * Builds the current cart form render array.
    *
    * @param \Drupal\commerce_order\Entity\OrderInterface[] $carts
    *   A list of cart orders.
    * @param \Drupal\Core\Cache\CacheableMetadata $cacheable_metadata
+   *   The cacheable metadata.
    *
    * @return array
    *   The current carts form render array.
@@ -254,6 +252,10 @@ class CartController extends ControllerBase {
     array $carts,
     CacheableMetadata $cacheable_metadata
   ) {
+    if (!$carts) {
+      return [];
+    }
+
     $cart_views = $this->getCartViews($carts);
 
     $current_cart_forms = $this->buildCarts(
@@ -267,7 +269,7 @@ class CartController extends ControllerBase {
       'current_carts' => [
         '#theme' => 'commerce_cart_advanced_current',
         '#carts' => $current_cart_forms,
-      ]
+      ],
     ];
   }
 
@@ -277,6 +279,7 @@ class CartController extends ControllerBase {
    * @param \Drupal\commerce_order\Entity\OrderInterface[] $carts
    *   A list of cart orders.
    * @param \Drupal\Core\Cache\CacheableMetadata $cacheable_metadata
+   *   The cacheable metadata.
    *
    * @return array
    *   The non current carts form render array.
@@ -285,6 +288,10 @@ class CartController extends ControllerBase {
     array $carts,
     CacheableMetadata $cacheable_metadata
   ) {
+    if (!$carts) {
+      return [];
+    }
+
     $cart_views = $this->getCartViews(
       $carts,
       'commerce_cart_advanced',
@@ -302,7 +309,7 @@ class CartController extends ControllerBase {
       'non_current_carts' => [
         '#theme' => 'commerce_cart_advanced_non_current',
         '#carts' => $non_current_cart_forms,
-      ]
+      ],
     ];
   }
 
@@ -377,12 +384,12 @@ class CartController extends ControllerBase {
   /**
    * Adds the empty cart page to the build array.
    *
-   * @param array $build
-   *   The render array.
+   * @return array
+   *   The cart form render array.
    */
-  protected function buildEmptyCart(array &$build) {
-    $build['empty'] = [
-      '#theme' => 'commerce_cart_empty_page',
+  protected function buildEmptyCart() {
+    return [
+      'empty' => ['#theme' => 'commerce_cart_empty_page'],
     ];
   }
 
@@ -409,10 +416,10 @@ class CartController extends ControllerBase {
    *
    * @param \Drupal\commerce_order\Entity\OrderInterface[] $carts
    *   The cart orders.
-   * @param $module
+   * @param string $module
    *   The module providing the third party setting defining the view that
    *   should be used per order type.
-   * @param $default_view
+   * @param string $default_view
    *   The view that should be used by default if no third party setting is
    *   set.
    *
@@ -452,6 +459,29 @@ class CartController extends ControllerBase {
   }
 
   /**
+   * Permanently marks the given carts as non current.
+   *
+   * Sets the corresponding boolean field and saves the carts, only those that
+   * are not already marked.
+   *
+   * @param \Drupal\commerce_order\Entity\OrderInterface[] $carts
+   *   The carts to mark as non current.
+   */
+  public function markCartsAsNonCurrent(array $carts) {
+    foreach ($carts as $cart) {
+      if (!$cart->hasField('field_non_current_cart')) {
+        continue;
+      }
+
+      $non_current_field = $cart->get('field_non_current_cart');
+      if ($non_current_field->isEmpty() || !$non_current_field->value) {
+        $cart->set('field_non_current_cart', TRUE);
+        $cart->save();
+      }
+    }
+  }
+
+  /**
    * Checks whether non-current carts are available and should be displayed.
    *
    * @param \Drupal\commerce_order\Entity\OrderInterface[] $carts
@@ -460,7 +490,7 @@ class CartController extends ControllerBase {
    * @return bool
    *   Whether the non-current carts should be displayed or not.
    */
-  protected function displayNonCurrentCarts($carts) {
+  protected function displayNonCurrentCarts(array $carts) {
     if (!$carts) {
       return FALSE;
     }
