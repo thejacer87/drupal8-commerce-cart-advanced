@@ -295,7 +295,7 @@ class CartController extends ControllerBase {
     $cart_views = $this->getCartViews(
       $carts,
       'commerce_cart_advanced',
-      'commerce_cart_form'
+      'commerce_cart_advanced_form'
     );
 
     $non_current_cart_forms = $this->buildCarts(
