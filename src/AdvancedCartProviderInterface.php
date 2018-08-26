@@ -39,7 +39,7 @@ interface AdvancedCartProviderInterface extends CartProviderInterface {
   public function getCurrentCartIds(AccountInterface $account = NULL);
 
   /**
-   * Gets the current cart order for the given store and user.
+   * Gets the current cart order for the given order type, store and user.
    *
    * @param string $order_type
    *   The order type ID.
@@ -58,7 +58,7 @@ interface AdvancedCartProviderInterface extends CartProviderInterface {
   );
 
   /**
-   * Gets the current cart order ID for the given store and user.
+   * Gets the current cart order ID for the given order type, store and user.
    *
    * @param string $order_type
    *   The order type ID.

@@ -91,7 +91,7 @@ class AdvancedCartProvider extends CartProvider implements AdvancedCartProviderI
     $store_id = $store->id();
 
     // Don't allow multiple cart orders matching the same criteria.
-    if ($this->getCurrentCartId($order_type, $store, $account)) {
+    if ($this->doGetCartId($order_type, $store, $account, TRUE)) {
       throw new DuplicateCartException(sprintf(
         'A current cart order for type "%s", store "%s" and account "%s" already exists',
         $order_type,
@@ -137,21 +137,51 @@ class AdvancedCartProvider extends CartProvider implements AdvancedCartProviderI
   /**
    * {@inheritdoc}
    */
-  public function getCurrentCarts(AccountInterface $account = NULL) {
-    $cart_ids = $this->getCurrentCartIds($account);
-    if ($cart_ids) {
-      return $this->orderStorage->loadMultiple($cart_ids);
-    }
+  public function getCarts(AccountInterface $account = NULL) {
+    return $this->doGetCarts($account);
+  }
 
-    return [];
+  /**
+   * {@inheritdoc}
+   */
+  public function getCartIds(AccountInterface $account = NULL) {
+    return $this->doGetCartIds($account);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getCart(
+    $order_type,
+    StoreInterface $store = NULL,
+    AccountInterface $account = NULL
+  ) {
+    return $this->doGetCart($order_type, $store, $account);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getCartId(
+    $order_type,
+    StoreInterface $store = NULL,
+    AccountInterface $account = NULL
+  ) {
+    return $this->doGetCartId($order_type, $store, $account);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getCurrentCarts(AccountInterface $account = NULL) {
+    return $this->doGetCarts($account, TRUE);
   }
 
   /**
    * {@inheritdoc}
    */
   public function getCurrentCartIds(AccountInterface $account = NULL) {
-    $cart_data = $this->loadCurrentCartData($account);
-    return array_keys($cart_data);
+    return $this->doGetCartIds($account, TRUE);
   }
 
   /**
@@ -162,10 +192,7 @@ class AdvancedCartProvider extends CartProvider implements AdvancedCartProviderI
     StoreInterface $store = NULL,
     AccountInterface $account = NULL
   ) {
-    $cart_id = $this->getCurrentCartId($order_type, $store, $account);
-    if ($cart_id) {
-      return $this->orderStorage->load($cart_id);
-    }
+    return $this->doGetCart($order_type, $store, $account, TRUE);
   }
 
   /**
@@ -176,7 +203,108 @@ class AdvancedCartProvider extends CartProvider implements AdvancedCartProviderI
     StoreInterface $store = NULL,
     AccountInterface $account = NULL
   ) {
-    $cart_data = $this->loadCurrentCartData($account);
+    return $this->doGetCartId($order_type, $store, $account, TRUE);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function clearCaches() {
+    $this->cartData = [];
+    $this->currentCartData = [];
+  }
+
+  /**
+   * Gets cart orders for the given user.
+   *
+   * @param \Drupal\Core\Session\AccountInterface $account
+   *   The user. If empty, the current user is assumed.
+   * @param bool
+   *   When TRUE, only current carts will be returned.
+   *
+   * @return \Drupal\commerce_order\Entity\OrderInterface[]
+   *   A list of current cart orders.
+   */
+  protected function doGetCarts(
+    AccountInterface $account = NULL,
+    $current_only = FALSE
+  ) {
+    $cart_ids = $this->doGetCartIds($account, $current_only);
+    if ($cart_ids) {
+      return $this->orderStorage->loadMultiple($cart_ids);
+    }
+
+    return [];
+  }
+
+  /**
+   * Gets cart order IDs for the given user.
+   *
+   * @param \Drupal\Core\Session\AccountInterface $account
+   *   The user. If empty, the current user is assumed.
+   * @param bool
+   *   When TRUE, only current carts will be returned.
+   *
+   * @return int[]
+   *   A list of current cart order IDs.
+   */
+  protected function doGetCartIds(
+    AccountInterface $account = NULL,
+    $current_only = FALSE
+  ) {
+    $cart_data = $this->loadCartData($account, $current_only);
+    return array_keys($cart_data);
+  }
+
+  /**
+   * Gets the cart order for the given order type, store and user.
+   *
+   * @param string $order_type
+   *   The order type ID.
+   * @param \Drupal\commerce_store\Entity\StoreInterface $store
+   *   The store. If empty, the current store is assumed.
+   * @param \Drupal\Core\Session\AccountInterface $account
+   *   The user. If empty, the current user is assumed.
+   * @param bool
+   *   When TRUE, a current cart will be returned.
+   *
+   * @return \Drupal\commerce_order\Entity\OrderInterface|null
+   *   The cart order, or NULL if none found.
+   */
+  protected function doGetCart(
+    $order_type,
+    StoreInterface $store = NULL,
+    AccountInterface $account = NULL,
+    $current_only = FALSE
+  ) {
+    $cart_id = $this->doGetCartId($order_type, $store, $account, $current_only);
+    if ($cart_id) {
+      return $this->orderStorage->load($cart_id);
+    }
+  }
+
+  /**
+   * Gets the cart order ID for the given order type, store and user.
+   *
+   * @param string $order_type
+   *   The order type ID.
+   * @param \Drupal\commerce_store\Entity\StoreInterface $store
+   *   The store. If empty, the current store is assumed.
+   * @param \Drupal\Core\Session\AccountInterface $account
+   *   The user. If empty, the current user is assumed.
+   * @param bool
+   *   When TRUE, a current cart will be returned.
+   *
+   * @return int|null
+   *   The cart order ID, or NULL if none found.
+   */
+  protected function doGetCartId(
+    $order_type,
+    StoreInterface $store = NULL,
+    AccountInterface $account = NULL,
+    $current_only = FALSE
+  ) {
+    $cart_data = $this->loadCartData($account, $current_only);
     if ($cart_data) {
       $store = $store ?: $this->currentStore->getStore();
       $search = [
@@ -189,14 +317,6 @@ class AdvancedCartProvider extends CartProvider implements AdvancedCartProviderI
   }
 
   /**
-   * {@inheritdoc}
-   */
-  public function clearCaches() {
-    $this->cartData = [];
-    $this->currentCartData = [];
-  }
-
-  /**
    * Loads the current cart data for the given user.
    *
    * @param \Drupal\Core\Session\AccountInterface $account
@@ -205,20 +325,24 @@ class AdvancedCartProvider extends CartProvider implements AdvancedCartProviderI
    * @return array
    *   The current cart data.
    */
-  protected function loadCurrentCartData(AccountInterface $account = NULL) {
+  protected function loadCartData(
+    AccountInterface $account = NULL,
+    $current_only = FALSE
+  ) {
     $account = $account ?: $this->currentUser;
     $uid = $account->id();
 
     // Check if we already have the cart data available first.
-    if (isset($this->currentCartData[$uid])) {
-      return $this->currentCartData[$uid];
+    $cache_property = $current_only ? 'currentCartData' : 'cartData';
+    if (isset($this->{$cache_property}[$uid])) {
+      return $this->{$cache_property}[$uid];
     }
 
     if ($account->isAuthenticated()) {
-      return $this->loadCurrentCartDataAuthenticatedUser($uid);
+      return $this->loadCartDataAuthenticatedUser($uid, $current_only);
     }
 
-    return $this->loadCurrentCartDataAnonymousUser();
+    return $this->loadCartDataAnonymousUser($current_only);
   }
 
   /**
@@ -230,19 +354,23 @@ class AdvancedCartProvider extends CartProvider implements AdvancedCartProviderI
    * @return array
    *   The cart data.
    */
-  protected function loadCurrentCartDataAuthenticatedUser($uid) {
-    $query = $this->buildCurrentCartDataQuery($uid);
+  protected function loadCartDataAuthenticatedUser(
+    $uid,
+    $current_only = FALSE
+  ) {
+    $query = $this->buildCartDataQuery($uid, $current_only);
     $carts = $query->execute();
 
-    $this->currentCartData[$uid] = [];
+    $cache_property = $current_only ? 'currentCartData' : 'cartData';
+    $this->{$cache_property}[$uid] = [];
     foreach ($carts as $cart) {
-      $this->currentCartData[$uid][$cart->order_id] = [
+      $this->{$cache_property}[$uid][$cart->order_id] = [
         'type' => $cart->type,
         'store_id' => $cart->store_id,
       ];
     }
 
-    return $this->currentCartData[$uid];
+    return $this->{$cache_property}[$uid];
   }
 
   /**
@@ -251,9 +379,10 @@ class AdvancedCartProvider extends CartProvider implements AdvancedCartProviderI
    * @return array
    *   The cart data.
    */
-  protected function loadCurrentCartDataAnonymousUser() {
+  protected function loadCartDataAnonymousUser($current_only = FALSE) {
     $uid = 0;
-    $this->currentCartData[$uid] = [];
+    $cache_property = $current_only ? 'currentCartData' : 'cartData';
+    $this->{$cache_property}[$uid] = [];
 
     // Get all carts from the user session.
     $cart_ids = $this->cartSession->getCartIds();
@@ -267,32 +396,37 @@ class AdvancedCartProvider extends CartProvider implements AdvancedCartProviderI
     /** @var \Drupal\commerce_order\Entity\OrderInterface[] $carts */
     $carts = $this->orderStorage->loadMultiple($cart_ids);
     foreach ($carts as $cart) {
+      // Skip locked carts, the customer is probably off-site for payment.
       if ($cart->isLocked()) {
-        // Skip locked carts, the customer is probably off-site for payment.
         continue;
       }
 
+      // Skip non-eligible carts.
       $is_not_cart = empty($cart->cart);
       $is_not_draft = $cart->getState()->value !== 'draft';
       if ($cart->getCustomerId() != $uid || $is_not_cart || $is_not_draft) {
         // Avoid loading non-eligible carts on the next page load.
         $this->cartSession->deleteCartId($cart_id);
 
-        // And skip them i.e. do not add them to the current carts array.
         continue;
       }
 
-      $this->currentCartData[$uid][$cart->id()] = [
+      // Skip non-current carts.
+      if ($current_only && $cart->get('field_non_current_cart')->value) {
+        continue;
+      }
+
+      $this->{$cache_property}[$uid][$cart->id()] = [
         'type' => $cart->bundle(),
         'store_id' => $cart->getStoreId(),
       ];
     }
 
-    return $this->cartData[$uid];
+    return $this->{$cache_property}[$uid];
   }
 
   /**
-   * Builds the cart data query for carts marked as non current.
+   * Builds the query for loading cart data.
    *
    * @param int $uid
    *   The user ID.
@@ -300,7 +434,7 @@ class AdvancedCartProvider extends CartProvider implements AdvancedCartProviderI
    * @return \Drupal\Core\Database\Query\Select
    *   The select query.
    */
-  protected function buildCurrentCartDataQuery($uid) {
+  protected function buildCartDataQuery($uid, $current_only = FALSE) {
     /** @var \Drupal\Core\Database\Query\Select $query */
     $query = $this->databaseConnection
       ->select('commerce_order', 'o')
@@ -309,10 +443,17 @@ class AdvancedCartProvider extends CartProvider implements AdvancedCartProviderI
       ->condition('o.cart', TRUE)
       ->condition('o.locked', FALSE)
       ->condition('o.uid', $uid);
-    $query->join('commerce_order__field_non_current_cart', 'n', 'o.order_id = n.entity_id');
-    $query
-      ->condition('n.field_non_current_cart_value', FALSE)
-      ->orderBy('o.order_id', 'DESC');
+
+    if ($current_only) {
+      $query->join(
+        'commerce_order__field_non_current_cart',
+        'n',
+        'o.order_id = n.entity_id'
+      );
+      $query->condition('n.field_non_current_cart_value', FALSE);
+    }
+
+    $query->orderBy('o.order_id', 'DESC');
 
     return $query;
   }
