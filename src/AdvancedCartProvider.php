@@ -390,6 +390,9 @@ class AdvancedCartProvider extends CartProvider implements AdvancedCartProviderI
       return [];
     }
 
+    // Sort by most recent first, same way we do for authenticated users.
+    arsort($cart_ids);
+
     // Getting the cart data and validating the cart IDs received from the
     // session requires loading the entities. This is a performance hit, but
     // it's assumed that these entities would be loaded at one point anyway.
