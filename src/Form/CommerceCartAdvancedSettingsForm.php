@@ -34,8 +34,25 @@ class CommerceCartAdvancedSettingsForm extends ConfigFormBase {
 
     $form['display_non_current_carts'] = [
       '#type' => 'checkbox',
-      '#title' => $this->t('Show non current carts'),
+      '#title' => $this->t('Show non-current carts'),
+      '#description' => $this->t(
+        'When checked the non-current carts will be displayed as a separate list
+         on the cart page, below the current carts. When unchecked the
+         non-current carts will not be displayed at all.'
+      ),
       '#default_value' => $config->get('display_non_current_carts'),
+    ];
+
+    $help_label = $this->t('What are current/non-current carts?');
+    $help_text = $this->t(
+      'By default, one cart per store (the most recent) is considered as current
+       while the rest are considered as non-current. Users have the ability to
+       explicitly flag carts as non-current (save for later), while other
+       installed modules are given the opportunity to change which carts are
+       considered currents and which not.'
+    );
+    $form['help'] = [
+      '#markup' => '&nbsp;<h5 style="margin-top:20px"><strong>' . $help_label . '</strong></h5><p>' . $help_text . '</p>',
     ];
 
     return parent::buildForm($form, $form_state);
