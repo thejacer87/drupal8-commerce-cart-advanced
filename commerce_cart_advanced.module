@@ -134,8 +134,17 @@ function commerce_cart_advanced_form_commerce_order_type_form_alter(
     ),
   ];
 
+  // Alter the title for the existing form view element to clarify that it will
+  // be applied to current carts.
   $form['commerce_cart']['cart_form_view']['#title'] = t('Current shopping carts form view');
 
+  // Alter the order of the form elements so that form view elements are
+  // displayed together before the block element.
+  $form['commerce_cart']['cart_form_view']['#weight'] = 0;
+  $form['commerce_cart']['cart_form_non_current_view']['#weight'] = 1;
+  $form['commerce_cart']['cart_block_view']['#weight'] = 2;
+
+  // Add custom submit handler so that we can save our setting.
   $form['actions']['submit']['#submit'][] = '_commerce_cart_advanced_order_type_form_submit';
 }
 
