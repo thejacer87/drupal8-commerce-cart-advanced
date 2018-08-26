@@ -6,12 +6,77 @@
  */
 
 use Drupal\commerce_cart_advanced\Form\AdvancedAddToCartForm;
-use Drupal\Core\Form\FormStateInterface;
 use Drupal\views\Form\ViewsForm;
+use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Routing\RouteMatchInterface;
 
 /**
  * Hooks.
  */
+
+/**
+ * Implements hook_help().
+ */
+function commerce_cart_advanced_help(
+  $route_name,
+  RouteMatchInterface $route_match
+) {
+  if ($route_name !== 'help.page.commerce_cart_advanced') {
+    return;
+  }
+
+  $output = '';
+
+  // About section.
+  $output .= '<h3>' . t('About') . '</h3>';
+  $output .= '<p>' . t(
+    'The Commerce Cart Advanced module provides enhancements, as well as
+     performance improvements, in the customer\'s cart management experience. At
+     the present time it mostly focuses on managing multiple carts.'
+  ) . '</p>';
+
+  // Current vs non-current carts section.
+  $output .= '<h3>' . t('Current vs Non-current Carts') . '</h3>';
+  $output .= '<p>' . t(
+    'Commerce Cart Advanced introduces the concept of current vs non-current
+     carts. By default, one cart per store (the most recent) is considered to be
+     current; the rest are considered to be non-current. In single-store sites a
+     user will therefore have only one current cart, while in multi-store sites
+     (such as marketplaces) a user may have multiple current carts. Current
+     carts will be displayed at the top of the cart page, while non-current
+     carts will be displayed separately at the bottom. Store managers can
+     configure the non-current carts to not be displayed at all.'
+  ) . '</p>';
+
+  // Individual cart page section.
+  $output .= '<h3>' . t('Individual cart page') . '</h3>';
+  $output .= '<p>' . t(
+    'Apart from the default cart page, each cart is provided its own individual
+     page. Non-current carts might only be displayed in summary mode on the cart
+     page. Users can view the full details of each cart on its individual page,
+     make changes to it, and choose to proceed to checkout.'
+  ) . '</p>';
+
+  // Save for later section.
+  $output .= '<h3>' . t('Save carts for later') . '</h3>';
+  $output .= '<p>' . t(
+    'Users are provided the ability to explicitly flag a cart as non-current;
+     this essentially allows users to remove carts from the current carts list
+     and save them for later. Saved for later carts will be available in the
+     non-current carts list, while sites can easily implement their own displays
+     of non-current carts using the Views module.'
+  ) . '</p>';
+
+  // Cart block section.
+  $output .= '<h3>' . t('Cart block') . '</h3>';
+  $output .= '<p>' . t(
+    'A new block, called Current Cart, is provided as a drop-in replacement to
+     the Cart block. It will display the number of items and summaries for
+     current carts only.'
+  ) . '</p>';
+
+  return $output;
+}
 
 /**
  * Implements hook_theme().
