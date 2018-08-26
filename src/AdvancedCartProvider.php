@@ -450,7 +450,10 @@ class AdvancedCartProvider extends CartProvider implements AdvancedCartProviderI
         'n',
         'o.order_id = n.entity_id'
       );
-      $query->condition('n.field_non_current_cart_value', FALSE);
+      $or_condition = $query->orConditionGroup()
+        ->condition('n.field_non_current_cart_value', FALSE)
+        ->isNull('n.field_non_current_cart_value');
+      $query->condition($or_condition);
     }
 
     $query->orderBy('o.order_id', 'DESC');
