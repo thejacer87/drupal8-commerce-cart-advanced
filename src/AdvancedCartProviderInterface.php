@@ -17,6 +17,28 @@ use Drupal\Core\Session\AccountInterface;
 interface AdvancedCartProviderInterface extends CartProviderInterface {
 
   /**
+   * Gets all current cart orders for the given user.
+   *
+   * @param \Drupal\Core\Session\AccountInterface $account
+   *   The user. If empty, the current user is assumed.
+   *
+   * @return \Drupal\commerce_order\Entity\OrderInterface[]
+   *   A list of current cart orders.
+   */
+  public function getCurrentCarts(AccountInterface $account = NULL);
+
+  /**
+   * Gets all current cart order IDs for the given user.
+   *
+   * @param \Drupal\Core\Session\AccountInterface $account
+   *   The user. If empty, the current user is assumed.
+   *
+   * @return int[]
+   *   A list of current cart order IDs.
+   */
+  public function getCurrentCartIds(AccountInterface $account = NULL);
+
+  /**
    * Gets the current cart order for the given store and user.
    *
    * @param string $order_type

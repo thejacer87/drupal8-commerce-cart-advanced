@@ -137,6 +137,26 @@ class AdvancedCartProvider extends CartProvider implements AdvancedCartProviderI
   /**
    * {@inheritdoc}
    */
+  public function getCurrentCarts(AccountInterface $account = NULL) {
+    $cart_ids = $this->getCurrentCartIds($account);
+    if ($cart_ids) {
+      return $this->orderStorage->loadMultiple($cart_ids);
+    }
+
+    return [];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getCurrentCartIds(AccountInterface $account = NULL) {
+    $cart_data = $this->loadCurrentCartData($account);
+    return array_keys($cart_data);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function getCurrentCart(
     $order_type,
     StoreInterface $store = NULL,
