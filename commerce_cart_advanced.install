@@ -25,6 +25,8 @@ function commerce_cart_advanced_install() {
  */
 function commerce_cart_advanced_uninstall() {
   // Uninstall configuration that was installed by (and depends on) this module.
+  $config_factory = \Drupal::configFactory();
+
   $config_names = [
     'core.entity_view_display.commerce_product_variation.default.cart_non_current',
     'core.entity_view_mode.commerce_product_variation.cart_non_current',
@@ -32,7 +34,7 @@ function commerce_cart_advanced_uninstall() {
   ];
 
   foreach ($config_names as $config_name) {
-    \Drupal::configFactory()->getEditable($config_name)->delete();
+    $config_factory->getEditable($config_name)->delete();
   }
 }
 
