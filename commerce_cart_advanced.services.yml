@@ -1,4 +1,8 @@
 services:
+  commerce_cart_advanced.order_service:
+    class: Drupal\commerce_cart_advanced\OrderService
+    arguments: ['@commerce.configurable_field_manager']
+
   commerce_cart_advanced.route_subscriber:
     class: Drupal\commerce_cart_advanced\EventSubscriber\RouteSubscriber
     tags:

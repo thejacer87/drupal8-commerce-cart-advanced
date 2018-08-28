@@ -469,13 +469,13 @@ class CartController extends ControllerBase {
    */
   public function markCartsAsNonCurrent(array $carts) {
     foreach ($carts as $cart) {
-      if (!$cart->hasField('field_non_current_cart')) {
+      if (!$cart->hasField(COMMERCE_CART_ADVANCED_NON_CURRENT_FIELD_NAME)) {
         continue;
       }
 
-      $non_current_field = $cart->get('field_non_current_cart');
+      $non_current_field = $cart->get(COMMERCE_CART_ADVANCED_NON_CURRENT_FIELD_NAME);
       if ($non_current_field->isEmpty() || !$non_current_field->value) {
-        $cart->set('field_non_current_cart', TRUE);
+        $cart->set(COMMERCE_CART_ADVANCED_NON_CURRENT_FIELD_NAME, TRUE);
         $cart->save();
       }
     }

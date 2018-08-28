@@ -415,7 +415,7 @@ class AdvancedCartProvider extends CartProvider implements AdvancedCartProviderI
       }
 
       // Skip non-current carts.
-      if ($current_only && $cart->get('field_non_current_cart')->value) {
+      if ($current_only && $cart->get(COMMERCE_CART_ADVANCED_NON_CURRENT_FIELD_NAME)->value) {
         continue;
       }
 
@@ -449,13 +449,14 @@ class AdvancedCartProvider extends CartProvider implements AdvancedCartProviderI
 
     if ($current_only) {
       $query->join(
-        'commerce_order__field_non_current_cart',
+        'commerce_order__' . COMMERCE_CART_ADVANCED_NON_CURRENT_FIELD_NAME,
         'n',
         'o.order_id = n.entity_id'
       );
+      $column_name = 'n.' . COMMERCE_CART_ADVANCED_NON_CURRENT_FIELD_NAME . '_value';
       $or_condition = $query->orConditionGroup()
-        ->condition('n.field_non_current_cart_value', FALSE)
-        ->isNull('n.field_non_current_cart_value');
+        ->condition($column_name, FALSE)
+        ->isNull($column_name);
       $query->condition($or_condition);
     }
 

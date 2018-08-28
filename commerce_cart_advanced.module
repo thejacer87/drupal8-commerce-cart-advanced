@@ -11,6 +11,15 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Routing\RouteMatchInterface;
 
 /**
+ * Constants.
+ */
+
+/**
+ * The name of the field that identifies an order as a non current cart.
+ */
+const COMMERCE_CART_ADVANCED_NON_CURRENT_FIELD_NAME = 'cart_is_non_current';
+
+/**
  * Hooks.
  */
 
@@ -189,11 +198,11 @@ function commerce_cart_advanced_form_alter(
 
   // Can't save a cart for later if the order type does not have the field, or
   // if the cart is already saved for later (marked as non current).
-  if (!$cart->hasField('field_non_current_cart')) {
+  if (!$cart->hasField(COMMERCE_CART_ADVANCED_NON_CURRENT_FIELD_NAME)) {
     return;
   }
 
-  $non_current_field = $cart->get('field_non_current_cart');
+  $non_current_field = $cart->get(COMMERCE_CART_ADVANCED_NON_CURRENT_FIELD_NAME);
   if (!$non_current_field->isEmpty() && $non_current_field->value) {
     return;
   }
@@ -242,7 +251,7 @@ function _commerce_cart_advanced_cart_form_submit(
     ->getStorage('commerce_order')
     ->load($cart_id);
 
-  $cart->set('field_non_current_cart', TRUE);
+  $cart->set(COMMERCE_CART_ADVANCED_NON_CURRENT_FIELD_NAME, TRUE);
   $cart->save();
 
   \Drupal::messenger()->addMessage(

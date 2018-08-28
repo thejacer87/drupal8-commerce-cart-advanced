@@ -3,9 +3,9 @@ status: true
 dependencies:
   config:
     - commerce_order.commerce_order_type.default
-    - field.storage.commerce_order.field_non_current_cart
-id: commerce_order.default.field_non_current_cart
-field_name: field_non_current_cart
+    - field.storage.commerce_order.cart_is_non_current
+id: commerce_order.default.cart_is_non_current
+field_name: cart_is_non_current
 entity_type: commerce_order
 bundle: default
 label: 'Non current cart'

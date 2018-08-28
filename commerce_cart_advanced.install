@@ -1,0 +1,110 @@
+<?php
+
+/**
+ * @file
+ * Install and update functions for the Commerce Cart Advanced module.
+ */
+
+use Drupal\entity\BundleFieldDefinition;
+
+/**
+ * Update functions.
+ */
+
+/**
+ * Rename the non-current cart field before making a stable release.
+ */
+function commerce_cart_advanced_update_8101() {
+  // Create the new field.
+  _commerce_cart_advanced_install_non_current_field();
+
+  // Migrate the values for all existing orders from the old field.
+  _commerce_cart_advanced_update__copy_field_values(
+    'commerce_order',
+    'field_non_current_cart',
+    COMMERCE_CART_ADVANCED_NON_CURRENT_FIELD_NAME
+  );
+
+  // Delete the old field from all order types.
+  _commerce_cart_advanced_update_8101__delete_old_non_current_field();
+}
+
+/**
+ * Helper functions for use within the install and update functions.
+ */
+
+/**
+ * Installs the field used to mark orders as non current carts.
+ */
+function _commerce_cart_advanced_install_non_current_field() {
+  $order_service = \Drupal::service('commerce_cart_advanced.order_service');
+
+  // Add the new field to all order types.
+  $order_types = \Drupal::service('entity_type.manager')
+    ->getStorage('commerce_order_type')
+    ->loadMultiple();
+  foreach ($order_types as $order_type) {
+    $order_service->installNonCurrentField($order_type);
+  }
+}
+
+/**
+ * Copies the values from a field to another for all entities of the given type.
+ *
+ * It assumes that the fields are of the same type; it makes no check.
+ *
+ * @param string $storage_name
+ *   The name of the storage for the entities.
+ * @param string $from_field_name
+ *   The name of the field to copy the values from.
+ * @param string $to_field_name
+ *   The name of the field to copy the values to.
+ */
+function _commerce_cart_advanced_update__copy_field_values(
+  $storage_name,
+  $from_field_name,
+  $to_field_name
+) {
+  $entities = \Drupal::service('entity_type.manager')
+    ->getStorage($storage_name)
+    ->loadMultiple();
+  foreach ($entities as $entity) {
+    if (!$entity->hasField($from_field_name)) {
+      continue;
+    }
+
+    $from_field = $entity->get($from_field_name);
+    if ($from_field->isEmpty()) {
+      continue;
+    }
+
+    $entity->set(
+      $to_field_name,
+      $from_field->value
+    );
+    $entity->save();
+  }
+}
+
+/**
+ * Helper functions for specific update functions.
+ */
+
+/**
+ * Deletes the old field used to mark orders as non current carts.
+ */
+function _commerce_cart_advanced_update_8101__delete_old_non_current_field() {
+  $field_manager = \Drupal::service('commerce.configurable_field_manager');
+  $field_definition = BundleFieldDefinition::create('boolean')
+    ->setTargetEntityTypeId('commerce_order')
+    ->setName('field_non_current_cart');
+
+  $order_types = \Drupal::service('entity_type.manager')
+    ->getStorage('commerce_order_type')
+    ->loadMultiple();
+  foreach ($order_types as $order_type) {
+    $definition = clone $field_definition;
+    $definition->setTargetBundle($order_type->id());
+    $field_manager->deleteField($definition);
+  }
+}
