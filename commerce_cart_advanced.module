@@ -196,12 +196,8 @@ function commerce_cart_advanced_form_alter(
     return;
   }
 
-  // Can't save a cart for later if the order type does not have the field, or
-  // if the cart is already saved for later (marked as non current).
-  if (!$cart->hasField(COMMERCE_CART_ADVANCED_NON_CURRENT_FIELD_NAME)) {
-    return;
-  }
-
+  // Can't save a cart for later if the cart is already saved for later (marked
+  // as non current).
   $non_current_field = $cart->get(COMMERCE_CART_ADVANCED_NON_CURRENT_FIELD_NAME);
   if (!$non_current_field->isEmpty() && $non_current_field->value) {
     return;
@@ -229,6 +225,12 @@ function _commerce_cart_advanced_order_type_form_submit(
 ) {
   /** @var \Drupal\commerce_order\Entity\OrderTypeInterface $order_type */
   $order_type = $form_state->getFormObject()->getEntity();
+
+  // Install the field for marking orders as non-current carts.
+  \Drupal::service('commerce_cart_advanced.order_service')
+    ->installNonCurrentField($order_type);
+
+  // Save our third party settings for the order type.
   $settings = $form_state->getValue(['commerce_cart']);
   $order_type->setThirdPartySetting(
     'commerce_cart_advanced',

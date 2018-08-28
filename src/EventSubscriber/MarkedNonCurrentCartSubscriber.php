@@ -33,11 +33,6 @@ class MarkedNonCurrentCartSubscriber implements EventSubscriberInterface {
 
     $changed = FALSE;
     foreach ($current_carts as $key => $current_cart) {
-      // Field needs to exists - it may not in custom order types.
-      if (!$current_cart->hasField(COMMERCE_CART_ADVANCED_NON_CURRENT_FIELD_NAME)) {
-        continue;
-      }
-
       // Field needs to be non-empty and not FALSE.
       $non_current_field = $current_cart->get(COMMERCE_CART_ADVANCED_NON_CURRENT_FIELD_NAME);
       if ($non_current_field->isEmpty() || !$non_current_field->value) {
