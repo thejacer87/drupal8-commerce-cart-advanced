@@ -196,6 +196,13 @@ function commerce_cart_advanced_form_alter(
     return;
   }
 
+  // If the setting to show saved carts is disabled, don't show the "save cart
+  // for later" button in the cart.
+  $config = \Drupal::configFactory()->get('commerce_cart_advanced.settings');
+  if (!$config->get('display_non_current_carts')) {
+    return;
+  }
+
   // Can't save a cart for later if the cart is already saved for later (marked
   // as non current).
   $non_current_field = $cart->get(COMMERCE_CART_ADVANCED_NON_CURRENT_FIELD_NAME);
